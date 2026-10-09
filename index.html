@@ -69880,9 +69880,9 @@ const agencyColumns = [
   { field: "transferredAreaRai", label: "พื้นที่ถ่ายโอน (ไร่)", renderCell: (value) => formatInteger(value) },
   {
     field: "transferMatched",
-    label: "สถานะจับคู่",
+    label: "สถานะการถ่ายโอน",
     renderCell: (value) => jsxRuntime.jsx('span', { className: `match-pill match-pill--${value ? "matched" : "unmatched"}`, children: 
-      value ? "พบในทะเบียน" : "ไม่พบคู่"
+      value ? "พบในทะเบียน" : "ไม่พบทะเบียนถ่ายโอน"
     }),
   },
 ];
@@ -70133,7 +70133,7 @@ function DashboardContent() {
     },
     {
       id: "audit:evidence", label: "รายละเอียดอำเภอและหน่วยงาน", items: ["district-table", "agency-table"],
-      header: jsxRuntime.jsx(dataApp.SectionHeader, { id: "audit:evidence-title", title: "หลักฐานระดับอำเภอและ อปท." ,} ),
+      header: jsxRuntime.jsx(dataApp.SectionHeader, { id: "audit:evidence-title", title: "ข้อมูลระดับอำเภอและ อปท." ,} ),
     },
   ];
 
@@ -70230,7 +70230,7 @@ function DashboardContent() {
         jsxRuntime.jsx(dataApp.DataComponent, { variant: "card", id: "district-table", queryId: "agency_budget", title: "สรุปรายอำเภอ",
           kind: "table", sourceRows: selectedAgencySourceRows, displayRows: districtRows,
           description: "รวมรายการ อปท.ไม่ซ้ำในจังหวัดและช่วงปีที่เลือก จัดเรียงตามวงเงินรวม"  , children: 
-          jsxRuntime.jsx(dataApp.DataTable, { rows: districtRows, columns: districtColumns, rowKey: "district",
+          jsxRuntime.jsx(dataApp.DataTable, { rows: districtRows, columns: districtColumns, rowKey: "district", pageSize: 10,
             caption: `สรุปงบประมาณรายอำเภอของจังหวัด${selectedProvince || "ที่เลือก"}`,} )
         })
       })
@@ -70238,8 +70238,8 @@ function DashboardContent() {
       , jsxRuntime.jsx(dataApp.SortableItem, { id: "agency-table", label: "รายละเอียด อปท." , kind: "table", span: 7, minSpan: 6, children: 
         jsxRuntime.jsx(dataApp.DataComponent, { variant: "card", id: "agency-table", queryId: "agency_budget", title: "รายละเอียด อปท." ,
           kind: "table", sourceRows: selectedAgencySourceRows, displayRows: selectedAgencies,
-          description: "ค้นหาและตรวจสอบวงเงิน ขนาดองค์กร ปีและพื้นที่ถ่ายโอน รวมถึงสถานะการจับคู่ทะเบียน"   , children: 
-          jsxRuntime.jsx(dataApp.DataTable, { rows: selectedAgencies, columns: agencyColumns,
+          description: "สถานะการถ่ายโอนอ้างอิงการจับคู่กับทะเบียนถ่ายโอนที่ใช้; ไม่พบทะเบียนถ่ายโอน หมายถึงไม่พบรายการที่จับคู่ได้ ไม่ยืนยันว่าไม่มีการถ่ายโอนจริง"   , children: 
+          jsxRuntime.jsx(dataApp.DataTable, { rows: selectedAgencies, columns: agencyColumns, pageSize: 10,
             caption: `รายการงบประมาณระดับ อปท. จังหวัด${selectedProvince || "ที่เลือก"}`,} )
         })
       })
