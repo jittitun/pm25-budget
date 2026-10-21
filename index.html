@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#ffffff">
-<meta name="data-app-snapshot-sha256" content="badd8c085829c4843b2d8853ebb6b0789a86e1f1fc6286a33242632169c7c87a">
+<meta name="data-app-snapshot-sha256" content="64cbfdc2948d2ea2ec30a6ecd67a18e29029b6f21763a6688812ca6581794aa7">
 <meta name="data-app-runtime-sha256" content="9e3ede84b28aded3c7379b6e6a5611f0d95b9977eb0f781e279ceefabfcbd27e">
 <meta name="data-app-bootstrap" content="deferred-content-v1">
 
@@ -69362,9 +69362,10 @@ header[data-data-app-chrome="topbar"] { display: none !important; }
         "metricDefinitions": [
           {
             "label": "อปท.งบรวมปี 2567–2569 เกิน 1 ล้านบาท",
-            "definition": "นับ อปท. ไม่ซ้ำด้วยจังหวัด อำเภอ และชื่อ อปท. รวมงบประมาณของแต่ละแห่งจากปี 2567–2569 แล้วนับเฉพาะยอดรวมที่มากกว่า 1,000,000 บาทอย่างเคร่งครัด; ใช้เกณฑ์เดียวกันทั้งข้อมูลจังหวัดและตัวกรองตารางรายละเอียด",
+            "definition": "นับ อปท. ไม่ซ้ำด้วยจังหวัด อำเภอ และชื่อ อปท. รวมงบประมาณของแต่ละแห่งจากปี 2567–2569 แล้วนับเฉพาะยอดรวมที่มากกว่า 1,000,000 บาทอย่างเคร่งครัด; จังหวัดที่ไม่พบหน่วยงานเข้าเกณฑ์แสดง 0 แห่ง และใช้เกณฑ์เดียวกันในข้อมูลจังหวัด เกณฑ์จัดอันดับจังหวัด และตัวกรองตารางรายละเอียด",
             "componentIds": [
               "province-profile",
+              "province-ranking",
               "agency-table"
             ],
             "formula": "COUNT DISTINCT [province,district,agency] WHERE SUM(budget across years 2567–2569) > 1000000",
@@ -69634,6 +69635,15 @@ function aggregateAgenciesAcrossYears(rows) {
   }));
 }
 
+function countAgenciesOverBudgetByProvince(rows, threshold) {
+  const counts = new Map();
+  for (const agency of aggregateAgenciesAcrossYears(rows)) {
+    if (!(agency.budget > threshold)) continue;
+    counts.set(agency.province, (counts.get(agency.province) ?? 0) + 1);
+  }
+  return counts;
+}
+
 function aggregateProvinceYears(provinceRows, agencyRows) {
   const agencyGroups = new Map();
   for (const row of aggregateAgenciesAcrossYears(agencyRows)) {
@@ -69843,6 +69853,7 @@ function provinceReasons(row, scopeRows) {
 const metricChoices = [
   { value: "totalBudget", label: "วงเงินงบประมาณ" },
   { value: "fundedAgencies", label: "จำนวน อปท.ได้รับงบ" },
+  { value: "agenciesOverMillion", label: "จำนวน อปท. ได้รับงบเกิน 1,000,000 บาท" },
   { value: "transferredAgencies", label: "จำนวน อปท.ถ่ายโอน" },
   { value: "averageBudget", label: "งบเฉลี่ยต่อ อปท." },
   { value: "fundingCoverage", label: "สัดส่วน อปท.ได้รับงบ" },
@@ -69855,6 +69866,7 @@ const metricLabels = Object.fromEntries(metricChoices.map(({ value, label }) => 
 function formatMetric(value, metric) {
   if (metric === "totalBudget" || metric === "averageBudget") return formatCompactBaht(value);
   if (["fundingCoverage", "top5BudgetShare", "absoluteBudgetChange"].includes(metric)) return formatPercent(value);
+  if (metric === "agenciesOverMillion") return `${formatInteger(value)} แห่ง`;
   return formatInteger(value);
 }
 
@@ -70155,6 +70167,8 @@ const stphChoiceLabels = Object.fromEntries(stphChoices.map((value) => [
 ]));
 const metricChoiceValues = metricChoices.map(({ value }) => value);
 const metricChoiceLabels = Object.fromEntries(metricChoices.map(({ value, label }) => [value, label]));
+const rankingMetricChoiceValues = metricChoiceValues.filter((value) => value !== "absoluteBudgetChange");
+const mapMetricChoiceValues = rankingMetricChoiceValues.filter((value) => value !== "agenciesOverMillion");
 const downloadScopeChoices = ["province", "stph"];
 const downloadScopeLabels = { province: "จังหวัด", stph: "สตภ." };
 const budgetYearColumns = ["2567", "2568", "2569"].map((year) => ({
@@ -70252,10 +70266,13 @@ function RankingPanel({ rows, metric, choices, onMetricChange, scopeKey, selecte
   const firstIndex = currentPage * rowsPerProvincePage;
   const visibleRows = rankedRows.slice(firstIndex, firstIndex + rowsPerProvincePage);
   const availableValues = rankedRows.map((row) => metricValue(row, metric)).filter(Number.isFinite);
-  const maximum = Math.max(1, ...availableValues);
+  const maximum = availableValues.length ? Math.max(...availableValues) : null;
+  const rankingDescription = metric === "agenciesOverMillion"
+    ? "นับ อปท. ไม่ซ้ำภายในจังหวัดจากรายการที่พบ โดยรวมงบปี 2567–2569 แล้วเลือกยอดที่มากกว่า 1,000,000 บาท"
+    : "แสดงทุกจังหวัดในขอบเขตที่เลือก เรียงตามเกณฑ์จากมากไปน้อย และวางจังหวัดที่ไม่มีข้อมูลไว้ท้ายรายการ";
   return jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
     jsxRuntime.jsxs('div', { className: "ranking-intro", children: [
-      jsxRuntime.jsx('p', { children: "แสดงทุกจังหวัดในขอบเขตที่เลือก เรียงตามเกณฑ์จากมากไปน้อย และวางจังหวัดที่ไม่มีข้อมูลไว้ท้ายรายการ"  })
+      jsxRuntime.jsx('p', { children: rankingDescription})
       , jsxRuntime.jsx(dataApp.Dropdown, { label: "เกณฑ์จัดอันดับ", showLabel: true, value: metric, choices: choices,
         choiceLabels: metricChoiceLabels, onChange: (value) => { setPage(0); onMetricChange(value); },} )
     ]})
@@ -70272,15 +70289,18 @@ function RankingPanel({ rows, metric, choices, onMetricChange, scopeKey, selecte
               jsxRuntime.jsxs('span', { className: "ranking-name", children: [jsxRuntime.jsx('strong', { children: row.province}), jsxRuntime.jsx('small', { children: row.stphLabel})]})
               , jsxRuntime.jsx('span', { className: "ranking-value", children: hasValue ? formatMetric(value, metric) : "ไม่มีข้อมูล"})
               , hasValue && jsxRuntime.jsx('span', { className: "ranking-track", 'aria-hidden': "true", children: 
-                jsxRuntime.jsx('span', { style: { width: `${value > 0 ? Math.max(3, value / maximum * 100) : 0}%` },} )
+                jsxRuntime.jsx('span', { style: { width: `${value > 0 && maximum > 0 ? Math.max(3, value / maximum * 100) : 0}%` },} )
               })
             ]})
           ]})
         }, row.province);
       })
     }) : jsxRuntime.jsx('p', { className: "empty-state", children: "ไม่มีจังหวัดในขอบเขตที่เลือก"})
-    , availableValues.length > 0 && jsxRuntime.jsxs('p', { className: "ranking-scale-note", children: ["แถบสีเทาเต็มเส้น = "
+    , availableValues.length > 0 && maximum > 0 && jsxRuntime.jsxs('p', { className: "ranking-scale-note", children: ["แถบสีเทาเต็มเส้น = "
         , formatMetric(maximum, metric), " ซึ่งเป็นค่าสูงสุดของทุกจังหวัดในขอบเขตที่เลือก · แถบสีแสดงค่าเทียบกับสเกลเดียวกันทุกหน้า"
+    ]})
+    , availableValues.length > 0 && maximum === 0 && jsxRuntime.jsxs('p', { className: "ranking-scale-note", children: ["ทุกจังหวัดในขอบเขตมีค่า "
+       , formatMetric(0, metric), " ตามเกณฑ์ที่เลือก"
     ]})
     , rankedRows.length > 0 && jsxRuntime.jsxs('nav', { className: "ranking-pagination", 'aria-label': "หน้ารายชื่อจังหวัด", children: [
       jsxRuntime.jsx(dataApp.Button, { variant: "secondary", disabled: currentPage === 0, onClick: () => setPage(currentPage - 1), children: "ก่อนหน้า"})
@@ -70333,11 +70353,19 @@ function DashboardContent() {
   const allProvinceRows = queries.province_year?.rows ?? [];
   const allAgencyBudgetRows = queries.agency_budget?.rows ?? [];
   const allStphRows = queries.stph_year?.rows ?? [];
-  const allMapRows = react.useMemo(() => allProvinceRows.filter((row) => String(row.year) === "all"),
-    [allProvinceRows]);
+  const aggregateProvinceRows = react.useMemo(() => allProvinceRows
+    .filter((row) => String(row.year) === "all"), [allProvinceRows]);
+  const agenciesOverMillionByProvince = react.useMemo(() => countAgenciesOverBudgetByProvince(
+    allAgencyBudgetRows, threeYearBudgetThreshold,
+  ), [allAgencyBudgetRows]);
+  const allMapRows = react.useMemo(() => aggregateProvinceRows.map((row) => ({
+    ...row,
+    agenciesOverMillion: agenciesOverMillionByProvince.get(row.province) ?? 0,
+  })), [aggregateProvinceRows, agenciesOverMillionByProvince]);
   const scopeRows = react.useMemo(() => allMapRows.filter((row) => currentStph === "all"
     || String(row.stphNo) === currentStph), [allMapRows, currentStph]);
-  const sourceProvinceRows = scopeRows;
+  const sourceProvinceRows = react.useMemo(() => aggregateProvinceRows.filter((row) => currentStph === "all"
+    || String(row.stphNo) === currentStph), [aggregateProvinceRows, currentStph]);
   const scopedAgencyRows = react.useMemo(() => allAgencyBudgetRows.filter((row) => currentStph === "all"
     || String(row.stphNo) === currentStph), [allAgencyBudgetRows, currentStph]);
   const scopedStphRows = react.useMemo(() => allStphRows.filter((row) => String(row.year) === "all"
@@ -70352,13 +70380,12 @@ function DashboardContent() {
   const [downloadProvince, setDownloadProvince] = react.useState("");
   const [downloadStph, setDownloadStph] = react.useState("");
   const [downloadUrls, setDownloadUrls] = react.useState({ key: "", district: "", agency: "" });
-  const availableMetricChoices = metricChoiceValues.filter((value) => value !== "absoluteBudgetChange");
-  const activeMapMetric = mapMetric === "absoluteBudgetChange" ? "totalBudget" : mapMetric;
-  const activeRankingMetric = rankingMetric === "absoluteBudgetChange" ? "totalBudget" : rankingMetric;
+  const activeMapMetric = mapMetricChoiceValues.includes(mapMetric) ? mapMetric : "totalBudget";
+  const activeRankingMetric = rankingMetricChoiceValues.includes(rankingMetric) ? rankingMetric : "totalBudget";
   const summary = react.useMemo(() => summarizeProvinceRows(scopeRows), [scopeRows]);
   react.useEffect(() => {
-    if (mapMetric === "absoluteBudgetChange") setMapMetric("totalBudget");
-    if (rankingMetric === "absoluteBudgetChange") setRankingMetric("totalBudget");
+    if (!mapMetricChoiceValues.includes(mapMetric)) setMapMetric("totalBudget");
+    if (!rankingMetricChoiceValues.includes(rankingMetric)) setRankingMetric("totalBudget");
   }, [mapMetric, rankingMetric]);
   react.useEffect(() => {
     if (!scopeRows.some((row) => row.province === selectedProvince)) {
@@ -70557,7 +70584,7 @@ function DashboardContent() {
           title: "แผนที่จังหวัด", kind: "custom", sourceRows: sourceProvinceRows, displayRows: scopeRows,
           description: "ระดับสีเปรียบเทียบเฉพาะจังหวัดภายใต้ตัวกรองปัจจุบัน สีเทาหมายถึงไม่มีค่าตามเกณฑ์" ,
           headerControls: jsxRuntime.jsx(dataApp.Dropdown, { label: "สีแผนที่", showLabel: true, value: activeMapMetric,
-            choices: availableMetricChoices, choiceLabels: metricChoiceLabels, onChange: setMapMetric,} ), children: 
+            choices: mapMetricChoiceValues, choiceLabels: metricChoiceLabels, onChange: setMapMetric,} ), children: 
           jsxRuntime.jsx(ProvinceMap, { allRows: allMapRows, scopeRows: scopeRows, metric: activeMapMetric,
             selectedProvince: selectedProvince, onSelect: setSelectedProvince,} )
         })
@@ -70565,10 +70592,12 @@ function DashboardContent() {
 
       , jsxRuntime.jsx(dataApp.SortableItem, { id: "province-ranking", label: "จังหวัดทั้งหมด", kind: "custom", span: 5, minSpan: 4, children: 
         jsxRuntime.jsx(dataApp.DataComponent, { variant: "card", padding: "spacious", id: "province-ranking", queryId: "province_year",
+          queryIds: ["province_year", "agency_budget"],
           title: "จังหวัดทั้งหมด", kind: "custom", sourceRows: sourceProvinceRows,
+          sourceRowsByQuery: { province_year: sourceProvinceRows, agency_budget: scopedAgencyRows },
           displayRows: sortAllProvinceRows(scopeRows, activeRankingMetric),
-          description: "แสดงทุกจังหวัดในขอบเขตที่เลือก แม้จังหวัดนั้นไม่มีค่าของเกณฑ์จัดอันดับ โดยไม่ตีความว่าเป็นคะแนนความผิดปกติ"  , children: 
-          jsxRuntime.jsx(RankingPanel, { rows: scopeRows, metric: activeRankingMetric, choices: availableMetricChoices,
+          description: "แสดงทุกจังหวัดในขอบเขตที่เลือก เกณฑ์จำนวน อปท. นับหน่วยงานไม่ซ้ำจากรายการที่พบและยอดรวมปี 2567–2569 จังหวัดที่ไม่พบหน่วยงานเข้าเกณฑ์แสดง 0 แห่ง และไม่ใช่คะแนนความผิดปกติ"        , children: 
+          jsxRuntime.jsx(RankingPanel, { rows: scopeRows, metric: activeRankingMetric, choices: rankingMetricChoiceValues,
             onMetricChange: setRankingMetric, scopeKey: currentStph,
             selectedProvince: selectedProvince, onSelect: setSelectedProvince,} )
         })
